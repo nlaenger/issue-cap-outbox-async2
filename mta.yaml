@@ -1,0 +1,154 @@
+_schema-version: "3.1"
+ID: com.dscgmbh.poc.replace_me
+description: DSC - PoC CAP
+version: 1.6.10
+
+#########################################################################
+# Allgemeine Parameter
+#########################################################################
+parameters:
+  deploy_mode: html5-repo
+  enable-parallel-deployments: true
+
+#########################################################################
+# Build Paramter
+#########################################################################
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npx --package @sap/cds-dk cds build --production
+        - npx tsc
+        - npx @cap-js/cds-typer "*" --outputDirectory gen/srv/@cds-models
+        - npx rimraf -g ./gen/**/*.ts
+        - npx copyfiles ./db/**/*.csv ./gen/srv/ -V
+        - npx copyfiles ./db/**/*.json ./gen/srv/ -V
+        - npx rimraf -g ./gen/**/*.cds
+
+#########################################################################
+# Build Module
+#########################################################################
+modules:
+  # CAP CDS Service
+  - name: com.dscgmbh.poc.replace_me-service
+    type: nodejs
+    path: gen/srv # In welchem Order sind die Dateien die in dern Service gepackt werden sollen
+    requires: # Benötigt:
+      - name: com.dscgmbh.poc.replace_me.destination # BTP Destiantion
+      - name: com.dscgmbh.poc.replace_me.xsuaa # BTP Userverwaltung
+    provides: # Stellt bereit:
+      - name: var_payint-service # Platzhalter - srv-api
+        properties:
+          service-url: ${default-url} # Geneerierte URL des Service in der CF
+    parameters:
+      buildpack: nodejs_buildpack
+      stack: cflinuxfs4
+      disk-quota: 256M
+      memory: 256M
+      command: node ./node_modules/@sap/cds/bin/cds-serve
+    build-parameters:
+      builder: custom
+      commands: [] # So lange wir die node_modules ignorieren können wir auch auf npm ci verzichten
+      # commands:
+      #   - npm clean-install --production
+      ignore:
+        - default-env.json
+        - ./node_modules/
+
+  # HTML5 App Repo Inhalt
+  - name: com.dscgmbh.poc.replace_me.html.content
+    type: com.sap.application.content
+    path: ./resources
+    requires: # Benötigt:
+      - name: com.dscgmbh.poc.replace_me.html.host # Name der Repo Host Ressource die den App Inhalt aufnhmen soll
+        parameters:
+          content-target: true
+
+  # Konfiguration des Destination Services
+  # HTML5 App Repo Inhalt
+  - name: com.dscgmbh.poc.replace_me.destination.html
+    type: com.sap.application.content
+    requires:
+      - name: com.dscgmbh.poc.replace_me.destination
+        parameters:
+          content-target: true
+      - name: com.dscgmbh.poc.replace_me.html.host
+        parameters:
+          service-key:
+            name: com.dscgmbh.poc.replace_me.html.host-key
+      - name: com.dscgmbh.poc.replace_me.xsuaa
+        parameters:
+          service-key:
+            name: com.dscgmbh.poc.replace_me.xsuaa-key
+    parameters:
+      content:
+        instance:
+          destinations:
+            - Name: com-dscgmbh-payint-xsuaa
+              Authentication: OAuth2UserTokenExchange
+              ServiceInstanceName: com.dscgmbh.poc.replace_me.xsuaa
+              ServiceKeyName: com.dscgmbh.poc.replace_me.xsuaa-key
+              sap.cloud.service: com.dscgmbh.poc.replace_me
+            - Name: com-dscgmbh-payint-html-host
+              ServiceInstanceName: com.dscgmbh.poc.replace_me.html.host
+              ServiceKeyName: com.dscgmbh.poc.replace_me.html.host-key
+              sap.cloud.service: com.dscgmbh.poc.replace_me
+          existing_destinations_policy: ignore
+    build-parameters:
+      no-source: true
+
+#########################################################################
+# Resourcen der CF
+#########################################################################
+resources:
+  #########################################################################
+  # Zugriff auf das XSUAA
+  #########################################################################
+  - name: com.dscgmbh.poc.replace_me.xsuaa
+    type: org.cloudfoundry.managed-service
+    parameters:
+      config:
+        xsappname: "com-dscgmbh-poc-replace_me-${space}"
+      path: ./xs-security.json # Konfigurationsdatei
+      service: xsuaa # Wir brauchen dern CF XSUAA Berechtigungsservice
+      service-name: com.dscgmbh.poc.replace_me.xsuaa # Name des Service der angelegt wird
+      service-plan: application #
+
+  #########################################################################
+  # Zugriff auf den Destiantion Servive
+  #########################################################################
+  - name: com.dscgmbh.poc.replace_me.destination
+    type: org.cloudfoundry.managed-service
+    requires:
+      - name: var_payint-service
+    parameters:
+      config: # Konfiguration
+        HTML5Runtime_enabled: true # Darf die HTML5 Runtime diese Destination nutzen um nach verknüpften HTML5-Repos zu suchen?
+        init_data: # Initale Konfiguration
+          instance:
+            destinations: # Anlagen der folgenden Destinationen
+              - Name: com-dscgmbh-payint-cap-srv # Zugriff auf den CAP CDS Service (dieser Anwendung)
+                Description: CAP PayInt service
+                Authentication: NoAuthentication
+                ProxyType: Internet
+                Type: HTTP
+                URL: ~{var_payint-service/service-url} # URL ist erst im laufe des Deploy bekannt daum hier als Platzhalter
+                HTML5.DynamicDestination: true # siehe auch das module: com.dscgmbh.poc.replace_me-service => provides
+                HTML5.ForwardAuthToken: true
+              - Name: ui5
+                ProxyType: Internet
+                Type: HTTP
+                URL: https://ui5.sap.com
+                Authentication: NoAuthentication
+            existing_destinations_policy: update
+      service: destination
+      service-name: com.dscgmbh.poc.replace_me.destination
+      service-plan: lite
+      version: 1.0.0
+
+  - name: com.dscgmbh.poc.replace_me.html.host
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-name: com.dscgmbh.poc.replace_me.html.host
+      service-plan: app-host

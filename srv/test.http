@@ -1,0 +1,16 @@
+
+
+### test event Variant 1
+POST http://localhost:4004/odata/v4/main-service/Test1 HTTP/1.1
+Accept: application/json
+content-type: application/json
+
+### test event Variant 2
+POST http://localhost:4004/odata/v4/main-service/Test2 HTTP/1.1
+Accept: application/json
+content-type: application/json
+
+### test event Variant 3
+POST http://localhost:4004/odata/v4/main-service/Test3 HTTP/1.1
+Accept: application/json
+content-type: application/json

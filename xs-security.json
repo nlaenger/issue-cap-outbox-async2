@@ -1,0 +1,7 @@
+{
+  "tenant-mode": "dedicated",
+  "description": "Security profile of com.dscgmbh.poc.replace_me.cds_event_testing",
+  "oauth2-configuration": {
+    "credential-types": ["binding-secret", "instance-secret"]
+  }
+}

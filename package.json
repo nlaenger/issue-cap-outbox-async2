@@ -1,0 +1,78 @@
+{
+  "name": "com.dscgmbh.poc.replace_me.cds_event_testing",
+  "version": "1.0.0",
+  "description": "A simple CAP project.",
+  "repository": "<Add your repository here>",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "npm": ">8.0.0",
+    "node": ">18.0.0"
+  },
+  "workspaces": [
+    "./app/*"
+  ],
+  "scripts": {
+    "start": "npx cds-ts serve all --with-mocks --in-memory",
+    "watch-hybrid": "npx cds-ts watch --profile hybrid",
+    "deploy": "cf deploy mta_archives/%npm_package_name%_%npm_package_version%.mtar --retries 1",
+    "undeploy": "cf undeploy %npm_package_name% --delete-services --delete-service-keys --delete-service-brokers",
+    "dump-db": "sqlite3 ./db.sqlite .dump > dump.txt",
+    "clean-db": "rimraf sqlite.db",
+    "build": "",
+    "predeploy": "npm run build",
+    "prebuild": "npm run cleanup && npm run test_compile",
+    "postbuild": "npx mbt build --mtar %npm_package_name%_%npm_package_version%.mtar",
+    "copy": "copyfiles -f \"./app/**/dist/zip/*.zip\" ./resources",
+    "cleanup": "npx rimraf ./gen ./mta_archives",
+    "test_compile": "npx cds-ts srv -s all -l all -2 edmx > NUL",
+    "bind": "npx cds-ts bind -2 %npm_package_name%.destination,%npm_package_name%.xsuaa",
+    "cds-typer": "npx @cap-js/cds-typer \"*\" --outputDirectory @cds-models"
+  },
+  "cds": {
+    "features": {
+      "with_mocks": true,
+      "in_memory_db": true
+    },
+    "requires": {
+      "outbox": {
+        "kind": "persistent-outbox",
+        "maxAttempts": 20,
+        "chunkSize": 100,
+        "storeLastError": true,
+        "parallel": true
+      },
+      "messaging": {
+        "kind": "local-messaging",
+        "outbox": true
+      },
+      "db": {
+        "kind": "better-sqlite"
+      },
+      "auth": {
+        "kind": "dummy"
+      }
+    }
+  },
+  "dependencies": {
+    "@sap/cds": "7.8.1",
+    "@sap/cds-common-content": "1.4.0",
+    "@sap/cds-fiori": "1.2.3",
+    "@cap-js/sqlite": "1.6.0"
+  },
+  "devDependencies": {
+    "@sap/cds-dk": "7.8.1",
+    "@types/express": "4.17.21",
+    "@cap-js/cds-typer": "0.19.0",
+    "cds-plugin-ui5": "0.8.2",
+    "cds-launchpad-plugin": "2.1.8",
+    "cds-swagger-ui-express": "0.8.0",
+    "copyfiles": "2.4.1",
+    "rimraf": "5.0.5",
+    "ts-node": "10.9.2",
+    "typescript": "5.4.3"
+  },
+  "imports": {
+    "#cds-models/*": "./@cds-models/*/index.js"
+  }
+}
